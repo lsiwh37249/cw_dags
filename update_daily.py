@@ -27,16 +27,18 @@ dag = DAG(
 
 date = (datetime.now()).strftime("%Y%m%d")
 aws_ip = Variable.get("AWS_IP")
-# --- 방법 1: FileSensor 사용 (권장) ---
+
+# --- FileSensor ---
 file_sensor_task = FileSensor(
     task_id='file_sensor',
     filepath=f"{date}.csv",
-    fs_conn_id='fs_default',  # 파일시스템 연결 ID (기본값 사용)
-    poke_interval=600,  # 30초마다 파일 확인
-    timeout=300,  # 5분 후 타임아웃
+    fs_conn_id='fs_default', # 파일시스템 연결 ID
+    poke_interval=600, 
+    timeout=300, 
     dag=dag,
 )
 
+# --- Upload Task ---
 upload_task = BashOperator(
     task_id='bash_task',
     bash_command=f"scp -i /opt/airflow/keys/cw_app.pem -o StrictHostKeyChecking=no \
@@ -44,6 +46,7 @@ upload_task = BashOperator(
     dag=dag,
 )
 
+# --- Check File Time ---
 check_file_time = BashOperator(
     task_id="check_file_time",
     bash_command=f"""
@@ -53,6 +56,7 @@ check_file_time = BashOperator(
     dag=dag
 )
 
+# --- Alert Task ---
 def alert_command(**context):
     date = context['task_instance'].xcom_pull(task_ids='check_file_time')
     print("-------"*444)
@@ -63,6 +67,6 @@ alert_task = PythonOperator(
     python_callable=alert_command,
     dag=dag,
 )
-# --- 태스크 순서 지정 (방법 선택) ---
 
+# --- 태스크 순서 지정 ---
 file_sensor_task >> upload_task >> check_file_time  >> alert_task
